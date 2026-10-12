@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Blackjack Trainer</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1>Blackjack Trainer <small>6 mazos · dealer pide en soft 17 (H17) · BJ 3:2 · doblar tras split · rendición tardía</small></h1>
+    <div class="bank">
+      <div><span class="lbl">Banca</span><b id="bankroll">$0</b></div>
+      <div><span class="lbl">Apuesta</span><b id="betAmount">$0</b></div>
+      <div><span class="lbl">Zapato</span><b id="shoeInfo">—</b></div>
+    </div>
+  </header>
+
+  <div class="layout">
+    <main class="table-col">
+      <section class="felt">
+        <div class="area">
+          <div class="area-title">Dealer <span id="dealerTotal" class="total"></span></div>
+          <div id="dealerCards" class="cards"></div>
+        </div>
+        <div id="status" class="status"></div>
+        <div class="area">
+          <div class="area-title">Tú</div>
+          <div id="hands" class="hands"></div>
+        </div>
+      </section>
+
+      <section id="controls" class="controls"></section>
+
+      <section id="feedback" class="feedback"></section>
+    </main>
+
+    <aside class="side-col">
+      <section class="panel" id="advisorPanel">
+        <div class="panel-head">
+          <h2>Asesor estadístico</h2>
+          <label class="chk"><input type="checkbox" id="optPractice"> Modo práctica (ocultar consejo)</label>
+        </div>
+        <div id="advisor"></div>
+        <p class="note">Ganancia/p&eacute;rdida promedio (EV) = lo que ganas (verde) o pierdes (rojo) por cada $1 apostado a largo plazo. Rojo solo significa que la mano es mala: elige el menos negativo. Cálculo con mazo infinito: es lo que puedes aplicar en el casino sin contar cartas.</p>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Conteo Hi-Lo</h2>
+          <label class="chk"><input type="checkbox" id="optCount"> Mostrar</label>
+        </div>
+        <div id="countPanel" class="count-panel"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Estadísticas</h2>
+          <button class="small" data-action="reset-all">Reiniciar todo</button>
+        </div>
+        <div id="stats"></div>
+      </section>
+    </aside>
+  </div>
+
+  <details class="panel chart-panel">
+    <summary>Tabla de estrategia básica (generada por el motor)</summary>
+    <div id="chart"></div>
+  </details>
+
+  <div id="tooltip" class="tooltip" role="tooltip" hidden></div>
+
+  <script src="js/engine.js"></script>
+  <script src="js/strategy.js"></script>
+  <script src="js/game.js"></script>
+  <script src="js/ui.js"></script>
+</body>
+</html>

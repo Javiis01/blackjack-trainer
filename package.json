@@ -1,0 +1,9 @@
+{
+  "name": "blackjack-trainer",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Entrenador de blackjack con asesor estadístico (HTML + JS puro)",
+  "scripts": {
+    "test": "node test/strategy.test.js && node test/game.test.js 300000"
+  }
+}
