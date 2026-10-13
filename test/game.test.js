@@ -63,5 +63,24 @@ t = scripted(['10', '6'], ['10', '9'], []);
 t.act('surrender');
 if (t.bankroll !== 950) { fails++; console.log('surrender mal', t.bankroll); }
 
+// Dos manos simultáneas: ambas se apuestan, se juegan y se pagan contra un dealer
+{
+  const x = new Game();
+  x.bankroll = 1000;
+  x.setSpots(2);
+  x.bet = 0; x.addChip(100);
+  const mk = (s) => s.map(r => ({ rank: r, suit: '♠' }));
+  // orden: mano1, mano2, dealer up, mano1, mano2, dealer oculta, + extras
+  x.shoe.cards = mk(['10', '10', '9', '10', '8', '7']).reverse();
+  x.shoe.cards.unshift(...Array(200).fill(0).map(() => ({ rank: '2', suit: '♠' })));
+  x.deal();
+  if (x.hands.length !== 2 || x.bankroll !== 800) { fails++; console.log('2 manos: reparto mal', x.hands.length, x.bankroll); }
+  x.act('stand'); x.act('stand');
+  // dealer 9+7=16 pide '2' => 18; mano1 20 gana, mano2 18 empata
+  if (x.phase !== 'settled' || x.hands[0].result !== 'win' || x.hands[1].result !== 'push' || x.bankroll !== 1100) {
+    fails++; console.log('2 manos: pago mal', x.phase, x.hands.map(h => h.result), x.bankroll);
+  }
+}
+
 console.log(fails === 0 ? 'OK' : fails + ' fallo(s)');
 process.exit(fails === 0 ? 0 : 1);

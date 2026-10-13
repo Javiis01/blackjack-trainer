@@ -10,6 +10,7 @@
   const START_BANK = 1000;
   const EPS = 0.01; // diferencias de EV menores a esto no cuentan como error
   const MAX_HANDS = 4;
+  const MAX_SPOTS = 2; // manos iniciales simultáneas
 
   function newStats() {
     return {
@@ -24,6 +25,7 @@
       this.bankroll = START_BANK;
       this.stats = newStats();
       this.lastBet = 0;
+      this.spots = 1; // número de manos que se apuestan/juegan a la vez
       this.countAssist = false; // si true, el seguro se evalúa con el true count
       if (saved) this.load(saved);
       this.resetRound();
@@ -43,12 +45,14 @@
     }
 
     serialize() {
-      return { bankroll: this.bankroll, stats: this.stats, lastBet: this.lastBet };
+      return { bankroll: this.bankroll, stats: this.stats, lastBet: this.lastBet, spots: this.spots };
     }
     load(s) {
       if (typeof s.bankroll === 'number') this.bankroll = s.bankroll;
       if (s.stats) this.stats = Object.assign(newStats(), s.stats);
       if (typeof s.lastBet === 'number') this.lastBet = s.lastBet;
+      if (s.spots === 1 || s.spots === 2) this.spots = s.spots;
+      if (this.bankroll < MIN_BET * this.spots) this.spots = 1;
     }
     rebuy() { // nueva banca sin borrar estadísticas
       if (this.phase !== 'betting' || this.bankroll >= MIN_BET) return false;
@@ -65,16 +69,22 @@
     }
 
     /* ---------- Apuestas ---------- */
+    setSpots(n) { // 1 o 2 manos simultáneas; la apuesta es por mano
+      if (this.phase !== 'betting' || n < 1 || n > MAX_SPOTS || this.bankroll < MIN_BET * n) return false;
+      this.spots = n;
+      if (this.bet * n > this.bankroll) this.bet = 0;
+      return true;
+    }
     addChip(v) {
       if (this.phase !== 'betting') return false;
-      if (this.bet + v > this.bankroll || this.bet + v > MAX_BET) return false;
+      if ((this.bet + v) * this.spots > this.bankroll || this.bet + v > MAX_BET) return false;
       this.bet += v;
       return true;
     }
     clearBet() { if (this.phase === 'betting') this.bet = 0; }
     rebet() {
       if (this.phase !== 'betting') return false;
-      if (this.lastBet >= MIN_BET && this.lastBet <= this.bankroll) { this.bet = this.lastBet; return true; }
+      if (this.lastBet >= MIN_BET && this.lastBet * this.spots <= this.bankroll) { this.bet = this.lastBet; return true; }
       return false;
     }
 
@@ -100,27 +110,31 @@
     /* ---------- Reparto ---------- */
     deal() {
       if (this.phase !== 'betting') return false;
-      if (this.bet < MIN_BET || this.bet > this.bankroll) return false;
+      if (this.bet < MIN_BET || this.bet * this.spots > this.bankroll) return false;
       const bet = this.bet;
       this.resetRound();
       this.bet = bet;
       if (this.shoe.needsShuffle()) { this.shoe.shuffle(); this.shuffled = true; }
-      this.bankroll -= bet;
+      this.bankroll -= bet * this.spots;
       this.lastBet = bet;
-      this.wagered = bet;
-      const hand = { cards: [], bet, doubled: false, fromSplit: false, aces: false, done: false, surrendered: false, result: null, payout: 0 };
-      this.hands = [hand];
-      hand.cards.push(this.drawVisible());
+      this.wagered = bet * this.spots;
+      this.hands = [];
+      for (let i = 0; i < this.spots; i++) {
+        this.hands.push({ cards: [], bet, doubled: false, fromSplit: false, aces: false, done: false, surrendered: false, result: null, payout: 0 });
+      }
+      this.hands.forEach((h) => h.cards.push(this.drawVisible()));
       const up = this.shoe.draw(); this.shoe.see(up);
       this.dealer.cards.push(up);
-      hand.cards.push(this.drawVisible());
+      this.hands.forEach((h) => h.cards.push(this.drawVisible()));
       this.dealer.cards.push(this.shoe.draw()); // carta oculta (aún no se cuenta)
       this.dealer.hidden = true;
-      hand.natural = Game.total(hand.cards).total === 21;
+      this.hands.forEach((h) => { h.natural = Game.total(h.cards).total === 21; });
       if (this.upValue === 1) this.phase = 'insurance';
       else this.resolveInitial();
       return true;
     }
+
+    get insuranceCost() { return this.hands.reduce((s, h) => s + h.bet, 0) / 2; }
 
     insuranceDecision() { // evaluación del seguro para mostrar en el asesor
       return S.insuranceAdvice(this.countAssist ? this.trueCount : 0);
@@ -129,25 +143,26 @@
     takeInsurance(take) {
       if (this.phase !== 'insurance') return false;
       const adv = this.insuranceDecision();
-      const cost = this.hands[0].bet / 2;
+      const cost = this.insuranceCost;
       if (take && this.bankroll < cost) return false;
       this.recordDecision(take === adv.take, take ? 'Tomar seguro' : 'Rechazar seguro',
-        adv.take ? 'Tomar seguro' : 'Rechazar seguro', take === adv.take ? 0 : Math.abs(adv.ev), adv.text, this.hands[0].bet);
+        adv.take ? 'Tomar seguro' : 'Rechazar seguro', take === adv.take ? 0 : Math.abs(adv.ev), adv.text, this.wagered);
       if (take) { this.insuranceBet = cost; this.bankroll -= cost; this.wagered += cost; }
       this.resolveInitial();
       return true;
     }
 
     resolveInitial() {
-      const hand = this.hands[0];
       const up = this.upValue;
       const dealerBJ = (up === 1 || up === 10) && Game.total(this.dealer.cards).total === 21;
-      if (dealerBJ || hand.natural) {
+      if (dealerBJ) {
         this.revealHole();
         return this.settle();
       }
       this.phase = 'player';
       this.active = 0;
+      this.hands.forEach((h) => { if (h.natural) h.done = true; });
+      this.advance();
     }
 
     revealHole() {
@@ -161,7 +176,7 @@
         canHit: !hand.aces,
         canDouble: hand.cards.length === 2 && !hand.aces && this.bankroll >= hand.bet,
         canSplit: hand.cards.length === 2 && v[0] === v[1] && this.hands.length < MAX_HANDS && this.bankroll >= hand.bet && !hand.aces,
-        canSurrender: this.hands.length === 1 && !hand.fromSplit && hand.cards.length === 2
+        canSurrender: !hand.fromSplit && hand.cards.length === 2
       };
     }
     advice() {
@@ -253,7 +268,7 @@
     dealerTurn() {
       this.phase = 'dealer';
       this.revealHole();
-      const live = this.hands.some(h => !h.surrendered && !Game.total(h.cards).bust);
+      const live = this.hands.some(h => !h.surrendered && !h.natural && !Game.total(h.cards).bust);
       if (live) {
         for (;;) {
           const t = Game.total(this.dealer.cards);
@@ -305,12 +320,13 @@
       if (this.phase !== 'settled') return false;
       const last = this.lastBet;
       this.resetRound();
+      if (this.bankroll < MIN_BET * this.spots) this.spots = 1;
       this.lastBet = last;
       return true;
     }
   }
 
-  const api = { Game, MIN_BET, MAX_BET, START_BANK, EPS, MAX_HANDS };
+  const api = { Game, MIN_BET, MAX_BET, START_BANK, EPS, MAX_HANDS, MAX_SPOTS };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.GameModule = api;
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -72,7 +72,7 @@
     const g = game;
     if (g.phase === 'betting') {
       if (g.bankroll < MIN_BET) return 'Sin fondos. Usa el botón de abajo para reiniciar la banca.';
-      return 'Haz tu apuesta (mínimo ' + money(MIN_BET) + ') y reparte.';
+      return 'Haz tu apuesta por mano (mínimo ' + money(MIN_BET) + ')' + (g.spots > 1 ? ' — se juegan ' + g.spots + ' manos a la vez' : '') + ' y reparte.';
     }
     const shuf = g.shuffled ? ' (zapato barajado)' : '';
     if (g.phase === 'insurance') return 'El dealer muestra un As. ¿Quieres seguro?' + shuf;
@@ -111,14 +111,16 @@
       html += '<button data-action="reset-all">Reiniciar todo (banca + estadísticas)</button>';
     } else if (g.phase === 'betting') {
       [5, 25, 100, 500].forEach((v) => {
-        html += '<button class="chip" data-action="chip" data-v="' + v + '"' + (g.bet + v > g.bankroll ? ' disabled' : '') + '>' + v + '</button>';
+        html += '<button class="chip" data-action="chip" data-v="' + v + '"' + ((g.bet + v) * g.spots > g.bankroll ? ' disabled' : '') + '>' + v + '</button>';
       });
+      html += '<button data-action="spots-1"' + (g.spots === 1 ? ' class="rec"' : '') + '>1 mano</button>';
+      html += '<button data-action="spots-2"' + (g.spots === 2 ? ' class="rec"' : '') + (g.bankroll < MIN_BET * 2 ? ' disabled' : '') + '>2 manos</button>';
       html += btn('clear', 'Borrar', '', g.bet > 0);
-      html += btn('rebet', 'Repetir apuesta', '', g.lastBet >= MIN_BET && g.lastBet <= g.bankroll);
+      html += btn('rebet', 'Repetir apuesta', '', g.lastBet >= MIN_BET && g.lastBet * g.spots <= g.bankroll);
       html += '<button class="primary" data-action="deal"' + (g.bet >= MIN_BET ? '' : ' disabled') + '>Repartir<span class="key">[Enter]</span></button>';
     } else if (g.phase === 'insurance') {
       const adv = g.insuranceDecision();
-      html += '<button data-action="ins-yes"' + (g.bankroll >= g.hands[0].bet / 2 ? '' : ' disabled') + (adv.take && showAdvice() ? ' class="rec"' : '') + '>Tomar seguro (' + money(g.hands[0].bet / 2) + ')<span class="key">[Y]</span></button>';
+      html += '<button data-action="ins-yes"' + (g.bankroll >= g.insuranceCost ? '' : ' disabled') + (adv.take && showAdvice() ? ' class="rec"' : '') + '>Tomar seguro (' + money(g.insuranceCost) + ')<span class="key">[Y]</span></button>';
       html += '<button data-action="ins-no"' + (!adv.take && showAdvice() ? ' class="rec"' : '') + '>No, gracias<span class="key">[N]</span></button>';
     } else if (g.phase === 'player') {
       const A = g.advice();
@@ -278,6 +280,8 @@
       case 'deal': g.deal(); revealed = false; break;
       case 'next': g.nextRound(); g.rebet(); break;
       case 'rebuy': g.rebuy(); break;
+      case 'spots-1': g.setSpots(1); break;
+      case 'spots-2': g.setSpots(2); break;
       case 'clear': g.clearBet(); break;
       case 'rebet': g.rebet(); break;
       case 'reveal': revealed = true; break;
