@@ -1,7 +1,9 @@
 /* Motor estadístico del asesor.
  * Mazo infinito (estrategia básica), reglas: dealer pide en soft 17 (H17), dealer revisa
  * la carta oculta con 10/As (las manos que jugamos son condicionales a "dealer sin blackjack"),
- * doblar en cualquier 2 cartas, doblar tras split (DAS), ases dividen con 1 carta, rendición tardía.
+ * doblar en cualquier 2 cartas, doblar tras split (DAS), ases dividen con 1 carta (se puede doblar antes de recibirla), rendición tardía.
+ * NOTA: el juego (game.js) solo revisa la carta oculta con As visible; con 10 visible se revela al final,
+ * por lo que contra un 10 el asesor es algo optimista al doblar/dividir (no cuenta el riesgo de As oculto).
  * Valores de cartas: 1 = As, 2..9, 10 = 10/J/Q/K.
  * Todos los EV están expresados en "unidades de la apuesta inicial".
  */
@@ -125,17 +127,27 @@
     return best;
   }
 
+  /* Un As dividido recibe exactamente una carta: resultado (por unidad) de plantarse con ella */
+  function aceOneCard(up) {
+    let win = 0, push = 0, lose = 0, ev = 0;
+    for (let d = 1; d <= 10; d++) {
+      const s = standOutcome(totalOf(1 + d, true), up);
+      win += P[d] * s.win; push += P[d] * s.push; lose += P[d] * s.lose; ev += P[d] * s.ev;
+    }
+    return { win, push, lose, ev, bust: 0 };
+  }
+
   const splitMemo = new Map();
   function splitOutcome(up, c) {
     const key = up * 11 + c;
     if (splitMemo.has(key)) return splitMemo.get(key);
     let win = 0, push = 0, lose = 0, perHand = 0;
     if (c === 1) {
-      // Ases: una carta cada uno, sin volver a dividir ni pedir
-      for (let d = 1; d <= 10; d++) {
-        const s = standOutcome(totalOf(1 + d, true), up);
-        win += P[d] * s.win; push += P[d] * s.push; lose += P[d] * s.lose; perHand += P[d] * s.ev;
-      }
+      // Ases: una carta cada uno, sin volver a dividir ni pedir; se puede doblar antes de recibirla
+      const one = aceOneCard(up);
+      const dbl = one.ev > 0;
+      win = one.win; push = one.push; lose = one.lose;
+      perHand = dbl ? 2 * one.ev : one.ev;
     } else {
       const plays = [];
       for (let d = 1; d <= 10; d++) plays[d] = bestTwoCard(up, c + d, d === 1 || false);
@@ -196,6 +208,19 @@
     return { cards, hard, ace, total, soft, isPair, up, dealerBust: dealerBust(up), actions, best, ranking, ctx };
   }
 
+  /* Decisión sobre un As dividido que aún no recibió su carta: 'stand' = recibir carta con la apuesta normal,
+   * 'double' = doblar la apuesta y recibir carta. */
+  function aceSplitHand(up, ctx) {
+    ctx = Object.assign({ canDouble: true }, ctx || {});
+    const one = aceOneCard(up);
+    const actions = { stand: one };
+    if (ctx.canDouble) actions.double = Object.assign({}, one, { ev: one.ev * 2 });
+    const best = actions.double && actions.double.ev > one.ev + 1e-9 ? 'double' : 'stand';
+    const ranking = Object.keys(actions).sort((a, b) => actions[b].ev - actions[a].ev);
+    if (ranking[0] !== best) { ranking.splice(ranking.indexOf(best), 1); ranking.unshift(best); }
+    return { cards: [1], hard: 1, ace: true, total: 11, soft: false, isPair: false, aceSplit: true, up, dealerBust: dealerBust(up), actions, best, ranking, ctx };
+  }
+
   /* ---------- Texto de explicación ---------- */
   function pc(x) { return (x * 100).toFixed(1) + '%'; }
   function ev(x) { return (x >= 0 ? '+' : '−') + Math.abs(x).toFixed(3); }
@@ -208,6 +233,15 @@
   function explain(A, action) {
     const a = A.actions[action];
     if (!a) return ['Esta acción no está disponible ahora.'];
+    if (A.aceSplit) {
+      const name = action === 'stand' ? 'Recibir carta' : 'Doblar';
+      const lines = ['<b>' + name + '</b> con As dividido vs dealer ' + upName(A.up) + ': solo recibirás una carta.',
+        'Resultado esperado: ganas ' + pc(a.win) + ', empatas ' + pc(a.push) + ', pierdes ' + pc(a.lose) + ' (EV ' + ev(a.ev) + ' por unidad apostada).'];
+      lines.push(action === 'double'
+        ? 'Con un As el 11 de partida es muy fuerte y no puedes pasarte con una sola carta: doblar multiplica la ventaja.'
+        : 'Recibir carta con la apuesta normal tiene EV ' + ev(a.ev) + (A.actions.double ? ', menor que doblar (' + ev(A.actions.double.ev) + ').' : '.'));
+      return lines;
+    }
     const lines = [];
     const up = A.up, t = A.total, weak = up >= 2 && up <= 6;
     const hitBust = A.actions.hit ? A.actions.hit.bust : 0;
@@ -301,7 +335,7 @@
     return { ups, rows };
   }
 
-  const api = { analyze, explain, insuranceAdvice, chart, dealerBust, dealerDist, standOutcome, NAMES, CODE, totalOf, isSoft };
+  const api = { analyze, aceSplitHand, explain, insuranceAdvice, chart, dealerBust, dealerDist, standOutcome, NAMES, CODE, totalOf, isSoft };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Strategy = api;
 })(typeof window !== 'undefined' ? window : globalThis);

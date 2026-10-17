@@ -63,6 +63,23 @@ t = scripted(['10', '6'], ['10', '9'], []);
 t.act('surrender');
 if (t.bankroll !== 950) { fails++; console.log('surrender mal', t.bankroll); }
 
+// Dealer con 10 visible y As oculto: no se revisa; se revela al final
+t = scripted(['10', '9'], ['K', 'A'], []);
+if (t.phase !== 'player' || !t.dealer.hidden) { fails++; console.log('10 visible: no debe revisar la carta oculta', t.phase); }
+t.act('stand');
+if (t.phase !== 'settled' || t.hands[0].result !== 'lose' || t.bankroll !== 900) { fails++; console.log('10 visible + As oculto mal', t.bankroll); }
+t = scripted(['A', 'K'], ['K', 'A'], []);
+if (t.phase !== 'settled' || t.bankroll !== 1000) { fails++; console.log('BJ vs BJ debe empatar', t.bankroll); }
+
+// Split de Ases: cada mano espera su carta y puede doblar
+t = scripted(['A', 'A'], ['6', '10'], [], ['9', '10']);
+t.act('split');
+if (t.hands.length !== 2 || t.hands.some(h => h.cards.length !== 1) || t.phase !== 'player') { fails++; console.log('split A: manos deben esperar su carta'); }
+if (!t.allowed().includes('double') || t.allowed().includes('hit') || t.allowed().includes('split')) { fails++; console.log('split A: acciones mal', t.allowed()); }
+t.act('double'); t.act('stand');
+// mano1 A+9=20 doblada (200), mano2 A+10=21 (100); dealer 16 + '2' = 18; ambas ganan: 1000-100-100-100+400+200
+if (t.phase !== 'settled' || t.bankroll !== 1300) { fails++; console.log('split A + double mal', t.phase, t.bankroll); }
+
 // Dos manos simultáneas: ambas se apuestan, se juegan y se pagan contra un dealer
 {
   const x = new Game();
