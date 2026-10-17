@@ -125,17 +125,32 @@
     return best;
   }
 
+  /* Mano de un solo As recién dividido (aún sin su carta). Recibirá exactamente una carta:
+   * 'stand' = recibirla con la apuesta normal, 'double' = doblar la apuesta antes de recibirla. */
+  function aceSplitHand(up, ctx) {
+    ctx = Object.assign({ canDouble: true }, ctx || {});
+    let win = 0, push = 0, lose = 0, ev = 0;
+    for (let d = 1; d <= 10; d++) {
+      const s = standOutcome(totalOf(1 + d, true), up);
+      win += P[d] * s.win; push += P[d] * s.push; lose += P[d] * s.lose; ev += P[d] * s.ev;
+    }
+    const actions = { stand: { win, push, lose, ev, bust: 0 } };
+    if (ctx.canDouble) actions.double = { win, push, lose, ev: ev * 2, bust: 0 };
+    const best = actions.double && actions.double.ev > ev + 1e-9 ? 'double' : 'stand';
+    const ranking = Object.keys(actions).sort((a, b) => actions[b].ev - actions[a].ev);
+    return { cards: [1], hard: 1, ace: true, total: 11, soft: true, isPair: false, pendingAce: true, up,
+      dealerBust: dealerBust(up), actions, best, ranking, ctx, win, push, lose };
+  }
+
   const splitMemo = new Map();
   function splitOutcome(up, c) {
     const key = up * 11 + c;
     if (splitMemo.has(key)) return splitMemo.get(key);
     let win = 0, push = 0, lose = 0, perHand = 0;
     if (c === 1) {
-      // Ases: una carta cada uno, sin volver a dividir ni pedir
-      for (let d = 1; d <= 10; d++) {
-        const s = standOutcome(totalOf(1 + d, true), up);
-        win += P[d] * s.win; push += P[d] * s.push; lose += P[d] * s.lose; perHand += P[d] * s.ev;
-      }
+      // Ases: una carta cada uno, sin volver a dividir ni pedir; se puede doblar cada mano antes de recibir su carta
+      const a = aceSplitHand(up);
+      win = a.win; push = a.push; lose = a.lose; perHand = a.actions[a.best].ev;
     } else {
       const plays = [];
       for (let d = 1; d <= 10; d++) plays[d] = bestTwoCard(up, c + d, d === 1 || false);
@@ -163,6 +178,7 @@
   /* cards: array de valores 1..10 de la mano; up: valor (1..10) de la carta visible del dealer.
    * ctx: { canDouble, canSplit, canSurrender, canHit } */
   function analyze(cards, up, ctx) {
+    if (cards.length === 1 && cards[0] === 1) return aceSplitHand(up, ctx);
     ctx = Object.assign({ canDouble: true, canSplit: true, canSurrender: true, canHit: true }, ctx || {});
     const hard = cards.reduce((s, c) => s + c, 0);
     const ace = cards.indexOf(1) !== -1;
@@ -215,6 +231,15 @@
       '. El dealer se pasa ' + pc(A.dealerBust) + ' de las veces con esa carta' +
       (weak ? ' (carta débil).' : (up >= 7 ? ' (carta fuerte, casi siempre llega a 17+).' : '.')));
 
+    if (A.pendingAce) {
+      lines.push(action === 'double'
+        ? 'Doblas la apuesta de este As antes de recibir su única carta. No puedes pasarte con una sola carta, así que doblar duplica la ganancia (y la pérdida) esperada: EV ' + ev(a.ev) + '.'
+        : 'Recibes tu única carta con la apuesta normal: EV ' + ev(a.ev) + '.');
+      lines.push(action === A.best
+        ? (action === 'double' ? 'El EV por mano es positivo, así que conviene apostar más.' : 'El EV por mano es negativo, así que conviene arriesgar lo mínimo.')
+        : 'La mejor opción es <b>' + NAMES[A.best] + '</b> (EV ' + ev(A.actions[A.best].ev) + ').');
+      return lines;
+    }
     if (action === 'surrender') {
       lines.push('Rendirte te cuesta exactamente la mitad de la apuesta (EV −0.500).');
       const alt = A.ranking.filter(x => x !== 'surrender')[0];
@@ -301,7 +326,7 @@
     return { ups, rows };
   }
 
-  const api = { analyze, explain, insuranceAdvice, chart, dealerBust, dealerDist, standOutcome, NAMES, CODE, totalOf, isSoft };
+  const api = { analyze, explain, insuranceAdvice, chart, dealerBust, dealerDist, standOutcome, aceSplitHand, NAMES, CODE, totalOf, isSoft };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Strategy = api;
 })(typeof window !== 'undefined' ? window : globalThis);

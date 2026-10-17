@@ -155,7 +155,9 @@
     }
 
     /* ---------- Asesor ---------- */
+    isPendingAce(hand) { return hand.aces && hand.cards.length === 1; } // As dividido que aún no recibió su carta
     ctxFor(hand) {
+      if (this.isPendingAce(hand)) return { canDouble: this.bankroll >= hand.bet };
       const v = hand.cards.map(E.cardValue);
       return {
         canHit: !hand.aces,
@@ -195,10 +197,17 @@
       if (!A.actions[action]) return false;
       const loss = A.actions[A.best].ev - A.actions[action].ev;
       const correct = action === A.best || loss <= EPS;
-      const handTxt = (A.isPair ? 'Par de ' : (A.soft ? 'Suave ' : 'Duro ')) + (A.isPair ? A.cards[0] : A.total) + ' vs ' + (A.up === 1 ? 'As' : A.up);
+      const handTxt = (A.pendingAce ? 'As dividido' : (A.isPair ? 'Par de ' : (A.soft ? 'Suave ' : 'Duro ')) + (A.isPair ? A.cards[0] : A.total)) + ' vs ' + (A.up === 1 ? 'As' : A.up);
       this.recordDecision(correct, S.NAMES[action], S.NAMES[A.best], loss,
         handTxt + ': elegiste ' + S.NAMES[action] + ', lo óptimo era ' + S.NAMES[A.best] + ' (cuesta ' + loss.toFixed(3) + ' por unidad).', hand.bet);
 
+      if (A.pendingAce) { // As dividido: recibe una única carta, con la apuesta normal o doblada
+        if (action === 'double') { this.bankroll -= hand.bet; this.wagered += hand.bet; hand.bet *= 2; hand.doubled = true; }
+        hand.cards.push(this.drawVisible());
+        hand.done = true;
+        this.advance();
+        return true;
+      }
       switch (action) {
         case 'hit': {
           hand.cards.push(this.drawVisible());
@@ -225,11 +234,11 @@
           const aces = E.cardValue(hand.cards[0]) === 1;
           if (aces) { hand.aces = true; second.aces = true; }
           this.hands.splice(this.active + 1, 0, second);
-          hand.cards.push(this.drawVisible());
-          if (aces) {
-            second.cards.push(this.drawVisible());
-            hand.done = true; second.done = true;
-          } else if (Game.total(hand.cards).total === 21) hand.done = true;
+          // Ases: cada mano espera su única carta; el jugador decide si dobla antes de recibirla
+          if (!aces) {
+            hand.cards.push(this.drawVisible());
+            if (Game.total(hand.cards).total === 21) hand.done = true;
+          }
           break;
         }
       }
@@ -240,7 +249,7 @@
     advance() {
       while (this.phase === 'player') {
         const h = this.current;
-        if (h.cards.length === 1) { // mano recién dividida que aún no recibió su 2ª carta
+        if (h.cards.length === 1 && !h.aces) { // mano recién dividida que aún no recibió su 2ª carta
           h.cards.push(this.drawVisible());
           if (Game.total(h.cards).total === 21) h.done = true;
         }

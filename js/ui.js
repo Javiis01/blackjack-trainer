@@ -125,7 +125,7 @@
       const ok = (a) => !!A.actions[a];
       const rec = (a) => (showAdvice() && A.best === a) ? ' class="rec"' : '';
       html += btn('hit', 'Pedir', 'H', ok('hit'), rec('hit'));
-      html += btn('stand', 'Plantarse', 'S', ok('stand'), rec('stand'));
+      html += btn('stand', A.pendingAce ? 'Recibir carta' : 'Plantarse', 'S', ok('stand'), rec('stand'));
       html += btn('double', 'Doblar', 'D', ok('double'), rec('double'));
       html += btn('split', 'Dividir', 'P', ok('split'), rec('split'));
       html += btn('surrender', 'Rendirse', 'R', ok('surrender'), rec('surrender'));
@@ -181,7 +181,7 @@
         '<div class="bar"><i class="w" style="width:' + (r.win * 100) + '%"></i><i class="p" style="width:' + (r.push * 100) + '%"></i><i class="l" style="width:' + (r.lose * 100) + '%"></i></div>' +
         '<div class="pcts">G ' + pcShort(r.win) + ' · E ' + pcShort(r.push) + ' · P ' + pcShort(r.lose) + (a === 'split' ? ' (aprox.)' : '') + '</div>';
       const tip = S.explain(A, a).map((l) => '<p>' + l + '</p>').join('');
-      return '<tr class="' + (isBest ? 'best' : '') + '"><td class="name">' + S.NAMES[a] + (isBest ? '<span class="star">★ RECOMENDADA</span>' : '') + '</td>' +
+      return '<tr class="' + (isBest ? 'best' : '') + '"><td class="name">' + (A.pendingAce && a === 'stand' ? 'Recibir carta' : S.NAMES[a]) + (isBest ? '<span class="star">★ RECOMENDADA</span>' : '') + '</td>' +
         '<td>' + bar + '</td><td>' + bust + '</td>' +
         '<td class="ev ' + evClass(r.ev) + '">' + evTxt(r.ev) + '<small>' + (r.ev >= 0 ? '+' : '−') + money(Math.abs(r.ev * bet)) + '</small></td>' +
         '<td>' + infoBtn(tip) + '</td></tr>';

@@ -63,5 +63,19 @@ t = scripted(['10', '6'], ['10', '9'], []);
 t.act('surrender');
 if (t.bankroll !== 950) { fails++; console.log('surrender mal', t.bankroll); }
 
+// Split de Ases: cada As espera su carta y se puede doblar antes de recibirla
+t = scripted(['A', 'A'], ['10', '6'], [], ['K', '9', '5', '7']);
+t.act('split');
+if (t.hands.length !== 2 || t.hands[0].cards.length !== 1 || t.phase !== 'player') { fails++; console.log('split ases: debe esperar decisión'); }
+else {
+  const adv = t.allowed();
+  if (!adv.includes('double') || !adv.includes('stand') || adv.length !== 2) { fails++; console.log('split ases: acciones', adv); }
+  t.act('double');
+  if (t.hands[0].bet !== 200 || !t.hands[0].doubled || t.hands[0].cards.length !== 2 || t.active !== 1) { fails++; console.log('split ases: doble mal'); }
+  t.act('stand');
+  if (t.phase !== 'settled' || t.hands[1].bet !== 100 || t.hands[1].cards.length !== 2) { fails++; console.log('split ases: stand mal', t.phase); }
+  if (Math.abs(t.bankroll - 1000 - t.roundSummary.net) > 1e-9) { fails++; console.log('split ases: contabilidad'); }
+}
+
 console.log(fails === 0 ? 'OK' : fails + ' fallo(s)');
 process.exit(fails === 0 ? 0 : 1);
