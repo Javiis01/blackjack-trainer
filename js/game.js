@@ -154,7 +154,9 @@
 
     resolveInitial() {
       const up = this.upValue;
-      const dealerBJ = (up === 1 || up === 10) && Game.total(this.dealer.cards).total === 21;
+      // Solo se revisa la carta oculta con As visible (tras el seguro). Con 10/J/Q/K no se
+      // revisa: el dealer la revela al terminar los jugadores y, si es As, tiene blackjack.
+      const dealerBJ = up === 1 && Game.total(this.dealer.cards).total === 21;
       if (dealerBJ) {
         this.revealHole();
         return this.settle();

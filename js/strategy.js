@@ -1,6 +1,8 @@
 /* Motor estadístico del asesor.
  * Mazo infinito (estrategia básica), reglas: dealer pide en soft 17 (H17), dealer revisa
- * la carta oculta con 10/As (las manos que jugamos son condicionales a "dealer sin blackjack"),
+ * la carta oculta con 10/As (las manos que jugamos son condicionales a "dealer sin blackjack").
+ * NOTA: el juego (game.js) solo revisa con As visible; con 10 no revisa, así que las tablas
+ * contra 10 son una aproximación (con 10 visible, doblar/dividir arriesga perder contra un As oculto),
  * doblar en cualquier 2 cartas, doblar tras split (DAS), ases dividen con 1 carta, rendición tardía.
  * Valores de cartas: 1 = As, 2..9, 10 = 10/J/Q/K.
  * Todos los EV están expresados en "unidades de la apuesta inicial".
