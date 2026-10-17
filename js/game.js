@@ -154,7 +154,8 @@
 
     resolveInitial() {
       const up = this.upValue;
-      const dealerBJ = (up === 1 || up === 10) && Game.total(this.dealer.cards).total === 21;
+      // Solo se revisa la carta oculta con As visible; con 10/J/Q/K se revela al final de la jugada
+      const dealerBJ = up === 1 && Game.total(this.dealer.cards).total === 21;
       if (dealerBJ) {
         this.revealHole();
         return this.settle();
@@ -182,6 +183,7 @@
     advice() {
       if (this.phase !== 'player') return null;
       const h = this.current;
+      if (h.aces && h.cards.length === 1) return S.aceSplitHand(this.upValue, { canDouble: this.bankroll >= h.bet });
       return S.analyze(Game.values(h), this.upValue, this.ctxFor(h));
     }
     allowed() {
@@ -210,9 +212,19 @@
       if (!A.actions[action]) return false;
       const loss = A.actions[A.best].ev - A.actions[action].ev;
       const correct = action === A.best || loss <= EPS;
-      const handTxt = (A.isPair ? 'Par de ' : (A.soft ? 'Suave ' : 'Duro ')) + (A.isPair ? A.cards[0] : A.total) + ' vs ' + (A.up === 1 ? 'As' : A.up);
-      this.recordDecision(correct, S.NAMES[action], S.NAMES[A.best], loss,
-        handTxt + ': elegiste ' + S.NAMES[action] + ', lo óptimo era ' + S.NAMES[A.best] + ' (cuesta ' + loss.toFixed(3) + ' por unidad).', hand.bet);
+      const handTxt = (A.aceSplit ? 'As dividido' : (A.isPair ? 'Par de ' : (A.soft ? 'Suave ' : 'Duro ')) + (A.isPair ? A.cards[0] : A.total)) + ' vs ' + (A.up === 1 ? 'As' : A.up);
+      const chosenName = A.aceSplit && action === 'stand' ? 'Recibir carta' : S.NAMES[action];
+      const bestName = A.aceSplit && A.best === 'stand' ? 'Recibir carta' : S.NAMES[A.best];
+      this.recordDecision(correct, chosenName, bestName, loss,
+        handTxt + ': elegiste ' + chosenName + ', lo óptimo era ' + bestName + ' (cuesta ' + loss.toFixed(3) + ' por unidad).', hand.bet);
+
+      if (A.aceSplit) { // As dividido: recibe una sola carta, opcionalmente doblando antes
+        if (action === 'double') { this.bankroll -= hand.bet; this.wagered += hand.bet; hand.bet *= 2; hand.doubled = true; }
+        hand.cards.push(this.drawVisible());
+        hand.done = true;
+        this.advance();
+        return true;
+      }
 
       switch (action) {
         case 'hit': {
@@ -240,11 +252,10 @@
           const aces = E.cardValue(hand.cards[0]) === 1;
           if (aces) { hand.aces = true; second.aces = true; }
           this.hands.splice(this.active + 1, 0, second);
-          hand.cards.push(this.drawVisible());
-          if (aces) {
-            second.cards.push(this.drawVisible());
-            hand.done = true; second.done = true;
-          } else if (Game.total(hand.cards).total === 21) hand.done = true;
+          if (!aces) {
+            hand.cards.push(this.drawVisible());
+            if (Game.total(hand.cards).total === 21) hand.done = true;
+          } // con Ases cada mano espera su única carta (se puede doblar antes de recibirla)
           break;
         }
       }
@@ -255,6 +266,7 @@
     advance() {
       while (this.phase === 'player') {
         const h = this.current;
+        if (h.cards.length === 1 && h.aces) return; // As dividido: espera la decisión del jugador
         if (h.cards.length === 1) { // mano recién dividida que aún no recibió su 2ª carta
           h.cards.push(this.drawVisible());
           if (Game.total(h.cards).total === 21) h.done = true;

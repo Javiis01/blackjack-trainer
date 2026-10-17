@@ -76,6 +76,7 @@
     }
     const shuf = g.shuffled ? ' (zapato barajado)' : '';
     if (g.phase === 'insurance') return 'El dealer muestra un As. ¿Quieres seguro?' + shuf;
+    if (g.phase === 'player' && g.current.aces && g.current.cards.length === 1) return 'Mano ' + (g.active + 1) + ' de ' + g.hands.length + ' (As dividido): doblar o recibir tu única carta' + shuf;
     if (g.phase === 'player') return (g.hands.length > 1 ? 'Juegas la mano ' + (g.active + 1) + ' de ' + g.hands.length : 'Tu turno') + shuf;
     if (g.phase === 'settled') {
       const r = g.roundSummary;
@@ -127,7 +128,7 @@
       const ok = (a) => !!A.actions[a];
       const rec = (a) => (showAdvice() && A.best === a) ? ' class="rec"' : '';
       html += btn('hit', 'Pedir', 'H', ok('hit'), rec('hit'));
-      html += btn('stand', 'Plantarse', 'S', ok('stand'), rec('stand'));
+      html += btn('stand', A.aceSplit ? 'Recibir carta' : 'Plantarse', 'S', ok('stand'), rec('stand'));
       html += btn('double', 'Doblar', 'D', ok('double'), rec('double'));
       html += btn('split', 'Dividir', 'P', ok('split'), rec('split'));
       html += btn('surrender', 'Rendirse', 'R', ok('surrender'), rec('surrender'));
