@@ -110,10 +110,102 @@ table.adv tr.best td:first-child { border-left: 3px solid var(--best); }
 .info-btn { width: 24px; height: 24px; padding: 0; border-radius: 50%; font-weight: 700; font-size: .8rem; line-height: 1; }
 
 .count-panel { font-size: .9rem; }
+.count-panel > p { margin: 0 0 8px; }
 .count-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; text-align: center; }
 .count-grid div { background: var(--panel-2); border-radius: 8px; padding: 6px; }
 .count-grid b { display: block; font-size: 1.3rem; }
-.count-grid span { font-size: .7rem; color: var(--muted); text-transform: uppercase; }
+.count-grid span { display: block; font-size: .7rem; color: var(--muted); text-transform: uppercase; }
+.count-grid small { display: block; font-size: .7rem; color: var(--muted); }
+.count-grid .tc { border: 1px solid var(--border); }
+.count-grid .tc.good { border-color: var(--win); } .count-grid .tc.good b { color: var(--win); }
+.count-grid .tc.bad { border-color: var(--lose); } .count-grid .tc.bad b { color: var(--lose); }
+
+/* Valor Hi-Lo de cada grupo de cartas */
+:root { --plus: #3fb950; --zero: #8b949e; --minus: #e5534b; }
+.count-legend { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 10px; }
+.lg { border-radius: 8px; padding: 6px; text-align: center; background: var(--panel-2); border-top: 3px solid; }
+.lg b { display: block; font-size: 1.1rem; }
+.lg .ranks { display: block; font-weight: 700; font-size: .8rem; letter-spacing: .02em; }
+.lg small { color: var(--muted); font-size: .7rem; }
+.lg.plus { border-color: var(--plus); } .lg.plus b { color: var(--plus); }
+.lg.zero { border-color: var(--zero); } .lg.zero b { color: var(--zero); }
+.lg.minus { border-color: var(--minus); } .lg.minus b { color: var(--minus); }
+
+/* Etiqueta en las cartas de la mesa (modo Aprender) */
+.card { position: relative; }
+.card .hl {
+  position: absolute; top: 3px; right: 3px; font-style: normal; font-size: .66rem; font-weight: 800;
+  padding: 0 4px; border-radius: 6px; line-height: 1.4; color: #fff;
+}
+.hl.plus { background: var(--plus); } .hl.zero { background: var(--zero); } .hl.minus { background: var(--minus); }
+
+/* Desglose de la ronda */
+.feed { background: var(--panel-2); border-radius: 8px; padding: 8px; margin-bottom: 10px; }
+.feed-head { font-size: .7rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 6px; }
+.feed p { margin: 0; }
+.feed-row { display: flex; flex-wrap: wrap; gap: 4px; align-items: stretch; }
+.fc {
+  display: inline-flex; flex-direction: column; align-items: center; min-width: 30px; padding: 2px 4px;
+  border-radius: 6px; background: #fff; color: #111; font-weight: 700; font-size: .8rem; line-height: 1.2;
+}
+.fc i { font-style: normal; font-size: .68rem; font-weight: 800; }
+.fc.plus i { color: #1a7f37; } .fc.zero i { color: #57606a; } .fc.minus i { color: #c62828; }
+.fc.start, .fc.now { background: transparent; color: var(--muted); border: 1px dashed var(--border); font-weight: 600; font-size: .66rem; }
+.fc.start i, .fc.now i { color: var(--text); font-size: .85rem; }
+.fc.now { border-style: solid; border-color: var(--accent); }
+
+/* Medidor de true count y veredicto */
+.meter {
+  position: relative; height: 8px; border-radius: 4px; margin: 12px 0 2px;
+  background: linear-gradient(90deg, var(--minus), var(--zero) 45%, var(--zero) 55%, var(--plus));
+}
+.meter i { position: absolute; top: -5px; width: 4px; height: 18px; margin-left: -2px; background: #fff; border-radius: 2px; box-shadow: 0 0 0 2px #0008; transition: left .3s; }
+.meter-lbl { display: flex; justify-content: space-between; font-size: .68rem; color: var(--muted); }
+.verdict { margin-top: 8px; padding: 8px 10px; border-radius: 8px; border-left: 4px solid var(--zero); background: var(--panel-2); }
+.verdict.good { border-color: var(--win); } .verdict.good > b { color: var(--win); }
+.verdict.bad { border-color: var(--lose); } .verdict.bad > b { color: var(--lose); }
+.verdict p { margin: 4px 0 6px; font-size: .82rem; }
+.sug { font-size: .85rem; }
+.sug b { color: var(--accent); }
+
+.howto { margin-top: 10px; font-size: .82rem; }
+.howto summary { cursor: pointer; font-weight: 700; color: var(--accent); }
+.howto ol { margin: 6px 0 0; padding-left: 20px; }
+.howto li { margin-bottom: 4px; }
+
+/* Modo Practicar */
+.quiz label { display: block; margin-bottom: 6px; }
+.quiz-row { display: flex; gap: 6px; }
+.quiz input {
+  flex: 1; min-width: 0; font: inherit; font-size: 1.1rem; padding: 6px 10px; border-radius: 8px;
+  background: var(--bg); color: var(--text); border: 1px solid var(--border);
+}
+.quiz input:focus { outline: 2px solid var(--best); }
+.count-panel .fb { margin-bottom: 10px; }
+
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.seg button { border: 0; border-radius: 0; background: transparent; color: var(--muted); }
+.seg button + button { border-left: 1px solid var(--border); }
+.seg button.on { background: var(--best); color: #fff; font-weight: 700; }
+
+/* Quiebra: burla sobre la mesa */
+.felt { position: relative; }
+.broke {
+  position: absolute; inset: 0; z-index: 5; border-radius: 12px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+  background: rgba(0,0,0,.72); text-align: center; padding: 14px; animation: broke-in .35s ease-out;
+}
+.broke[hidden] { display: none; }
+.broke img {
+  width: min(220px, 60%); aspect-ratio: 1; object-fit: cover; /* recorta las franjas negras de la imagen */
+  border-radius: 12px; border: 4px solid var(--accent); box-shadow: 0 8px 30px rgba(0,0,0,.6);
+  animation: broke-laugh 1.2s ease-in-out .35s infinite;
+}
+.broke h3 { margin: 6px 0 0; font-size: 1.4rem; color: var(--accent); }
+.broke p { margin: 0 0 6px; color: #bfe3cd; }
+@keyframes broke-in { from { opacity: 0; transform: scale(.9); } to { opacity: 1; transform: none; } }
+@keyframes broke-laugh { 0%, 100% { transform: rotate(-3deg); } 50% { transform: rotate(3deg) scale(1.04); } }
+@media (prefers-reduced-motion: reduce) { .broke, .broke img { animation: none; } }
 
 .stat-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px 12px; font-size: .88rem; }
 .stat-grid div { display: flex; justify-content: space-between; border-bottom: 1px solid var(--border); padding: 2px 0; }

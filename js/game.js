@@ -11,11 +11,13 @@
   const EPS = 0.01; // diferencias de EV menores a esto no cuentan como error
   const MAX_HANDS = 4;
   const MAX_SPOTS = 2; // manos iniciales simultáneas
+  const BET_UNIT = 10; // unidad de apuesta para la sugerencia del conteo
 
   function newStats() {
     return {
       rounds: 0, wins: 0, losses: 0, pushes: 0, blackjacks: 0, net: 0, wagered: 0,
-      decisions: 0, correct: 0, evLost: 0, moneyLost: 0, errors: [], peak: START_BANK
+      decisions: 0, correct: 0, evLost: 0, moneyLost: 0, errors: [], peak: START_BANK,
+      countChecks: 0, countCorrect: 0
     };
   }
 
@@ -42,6 +44,8 @@
       this.feedback = null;
       this.roundSummary = null;
       this.shuffled = false;
+      this.seen = []; // cartas que se hicieron visibles en esta ronda (desglose del conteo)
+      this.startCount = this.shoe.runningCount;
     }
 
     serialize() {
@@ -82,6 +86,11 @@
       return true;
     }
     clearBet() { if (this.phase === 'betting') this.bet = 0; }
+    setBet(v) {
+      if (this.phase !== 'betting' || v < MIN_BET || v > MAX_BET || v * this.spots > this.bankroll) return false;
+      this.bet = v;
+      return true;
+    }
     rebet() {
       if (this.phase !== 'betting') return false;
       if (this.lastBet >= MIN_BET && this.lastBet * this.spots <= this.bankroll) { this.bet = this.lastBet; return true; }
@@ -101,10 +110,25 @@
     get runningCount() { return this.shoe.runningCount; }
     get trueCount() { return this.shoe.trueCount(this.dealer.hidden ? 1 : 0); }
 
+    see(c) { this.shoe.see(c); this.seen.push(c); }
     drawVisible() {
       const c = this.shoe.draw();
-      this.shoe.see(c);
+      this.see(c);
       return c;
+    }
+
+    /* ---------- Conteo ---------- */
+    countAdvice() { return S.countAdvice(this.trueCount); }
+    suggestedBet() { // apuesta por mano según el true count, ajustada a la banca
+      const units = this.countAdvice().units;
+      const max = Math.min(MAX_BET, Math.floor(this.bankroll / this.spots / MIN_BET) * MIN_BET);
+      return { units, amount: Math.max(MIN_BET, Math.min(units * BET_UNIT, max)) };
+    }
+    checkCount(guess) { // modo práctica: el jugador dice el running count
+      const ok = guess === this.runningCount;
+      this.stats.countChecks++;
+      if (ok) this.stats.countCorrect++;
+      return ok;
     }
 
     /* ---------- Reparto ---------- */
@@ -115,6 +139,7 @@
       this.resetRound();
       this.bet = bet;
       if (this.shoe.needsShuffle()) { this.shoe.shuffle(); this.shuffled = true; }
+      this.startCount = this.shoe.runningCount;
       this.bankroll -= bet * this.spots;
       this.lastBet = bet;
       this.wagered = bet * this.spots;
@@ -123,8 +148,7 @@
         this.hands.push({ cards: [], bet, doubled: false, fromSplit: false, aces: false, done: false, surrendered: false, result: null, payout: 0 });
       }
       this.hands.forEach((h) => h.cards.push(this.drawVisible()));
-      const up = this.shoe.draw(); this.shoe.see(up);
-      this.dealer.cards.push(up);
+      this.dealer.cards.push(this.drawVisible());
       this.hands.forEach((h) => h.cards.push(this.drawVisible()));
       this.dealer.cards.push(this.shoe.draw()); // carta oculta (aún no se cuenta)
       this.dealer.hidden = true;
@@ -167,7 +191,7 @@
     }
 
     revealHole() {
-      if (this.dealer.hidden) { this.dealer.hidden = false; this.shoe.see(this.dealer.cards[1]); }
+      if (this.dealer.hidden) { this.dealer.hidden = false; this.see(this.dealer.cards[1]); }
     }
 
     /* ---------- Asesor ---------- */
@@ -338,7 +362,7 @@
     }
   }
 
-  const api = { Game, MIN_BET, MAX_BET, START_BANK, EPS, MAX_HANDS, MAX_SPOTS };
+  const api = { Game, MIN_BET, MAX_BET, START_BANK, EPS, MAX_HANDS, MAX_SPOTS, BET_UNIT };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.GameModule = api;
 })(typeof window !== 'undefined' ? window : globalThis);
