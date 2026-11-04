@@ -28,6 +28,12 @@
           <div class="area-title">Tú</div>
           <div id="hands" class="hands"></div>
         </div>
+        <div id="broke" class="broke" hidden>
+          <img src="img/burla.png" alt="Gato riéndose y señalándote">
+          <h3>¡Te quedaste sin un peso!</h3>
+          <p>La casa siempre gana… jajaja</p>
+          <button class="primary" data-action="rebuy">Volver a empezar con $1000</button>
+        </div>
       </section>
 
       <section id="controls" class="controls"></section>
@@ -47,8 +53,12 @@
 
       <section class="panel">
         <div class="panel-head">
-          <h2>Conteo Hi-Lo</h2>
-          <label class="chk"><input type="checkbox" id="optCount"> Mostrar</label>
+          <h2>Conteo de cartas (Hi-Lo)</h2>
+          <div class="seg" id="countMode" role="group" aria-label="Modo de conteo">
+            <button class="small" data-action="count-off">Apagado</button>
+            <button class="small" data-action="count-learn">Aprender</button>
+            <button class="small" data-action="count-quiz">Practicar</button>
+          </div>
         </div>
         <div id="countPanel" class="count-panel"></div>
       </section>

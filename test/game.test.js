@@ -99,5 +99,38 @@ if (t.phase !== 'settled' || t.bankroll !== 1300) { fails++; console.log('split 
   }
 }
 
+// Conteo: el desglose de la ronda cuadra con el running count y la oculta se cuenta al voltearse
+{
+  const Eng = require('../js/engine.js');
+  const x = new Game();
+  x.bankroll = 1000;
+  x.shoe.runningCount = 2;
+  x.bet = 0; x.addChip(25);
+  const mk = (s) => s.map(r => ({ rank: r, suit: '♠' }));
+  // mano 10,6 · dealer 5 (visible) y K (oculta) · pide 2
+  x.shoe.cards = mk(['10', '5', '6', 'K', '2']).reverse();
+  x.shoe.cards.unshift(...Array(200).fill(0).map(() => ({ rank: '7', suit: '♠' })));
+  x.deal();
+  if (x.startCount !== 2 || x.seen.length !== 3 || x.runningCount !== 2 + (-1 + 1 + 1)) {
+    fails++; console.log('conteo: reparto mal', x.startCount, x.seen.length, x.runningCount);
+  }
+  x.act('hit'); // 18
+  x.act('stand');
+  const sum = x.seen.reduce((s, c) => s + Eng.hiLo(c), 0);
+  if (x.phase !== 'settled' || x.runningCount !== x.startCount + sum || x.seen.length !== x.hands[0].cards.length + x.dealer.cards.length) {
+    fails++; console.log('conteo: desglose mal', x.runningCount, x.startCount, sum, x.seen.length);
+  }
+  if (!x.checkCount(x.runningCount) || x.checkCount(x.runningCount + 1) || x.stats.countChecks !== 2 || x.stats.countCorrect !== 1) {
+    fails++; console.log('conteo: comprobación mal', x.stats.countChecks, x.stats.countCorrect);
+  }
+  x.nextRound();
+  x.shoe.runningCount = 30; // TC muy alto -> 8 unidades = $80
+  if (x.suggestedBet().amount !== 80 || !x.setBet(x.suggestedBet().amount) || x.bet !== 80) {
+    fails++; console.log('conteo: apuesta sugerida mal', x.suggestedBet(), x.bet);
+  }
+  x.bankroll = 30; // la sugerencia no puede pasar de la banca
+  if (x.suggestedBet().amount !== 30) { fails++; console.log('conteo: sugerencia sobre la banca', x.suggestedBet()); }
+}
+
 console.log(fails === 0 ? 'OK' : fails + ' fallo(s)');
 process.exit(fails === 0 ? 0 : 1);

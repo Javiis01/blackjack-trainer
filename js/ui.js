@@ -9,8 +9,10 @@
   const KEY = 'bj-trainer-v1';
   const $ = (id) => document.getElementById(id);
 
-  let prefs = { practice: false, showCount: false };
+  let prefs = { practice: false, countMode: 'off' }; // countMode: off | learn | quiz
   let revealed = false; // modo práctica: consejo mostrado para la decisión actual
+  let quiz = null;      // modo practicar conteo: { round, guess, ok } de la última respuesta
+  let wentBroke = false; // la burla solo sale al quebrar jugando, no al abrir con una banca vacía guardada
   let tips = [];        // contenido HTML de los tooltips del render actual
   let game;
 
@@ -19,6 +21,8 @@
     let saved = null;
     try { saved = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) { /* sin storage */ }
     if (saved && saved.prefs) prefs = Object.assign(prefs, saved.prefs);
+    if (prefs.showCount && !saved.prefs.countMode) prefs.countMode = 'learn'; // versión anterior: casilla "Mostrar"
+    delete prefs.showCount;
     game = new Game(saved && saved.game);
   }
   function save() {
@@ -37,8 +41,15 @@
   const KEYS = { hit: 'H', stand: 'S', double: 'D', split: 'P', surrender: 'R' };
 
   /* ---------- Render: cartas y mesa ---------- */
+  function hiLoTxt(v) { return v > 0 ? '+1' : v < 0 ? '−1' : '0'; }
+  function hiLoCls(v) { return v > 0 ? 'plus' : v < 0 ? 'minus' : 'zero'; }
+  function signed(n) { return (n > 0 ? '+' : n < 0 ? '−' : '') + Math.abs(n); }
+
   function cardHTML(c) {
-    return '<div class="card ' + (E.isRed(c) ? 'red' : '') + '"><span>' + c.rank + '</span><span class="suit">' + c.suit + '</span></div>';
+    // modo Aprender: cada carta visible muestra cuánto suma al conteo
+    const v = E.hiLo(c);
+    const tag = prefs.countMode === 'learn' ? '<i class="hl ' + hiLoCls(v) + '">' + hiLoTxt(v) + '</i>' : '';
+    return '<div class="card ' + (E.isRed(c) ? 'red' : '') + '"><span>' + c.rank + '</span><span class="suit">' + c.suit + '</span>' + tag + '</div>';
   }
   function backHTML() { return '<div class="card back"></div>'; }
 
@@ -209,16 +220,111 @@
   }
 
   /* ---------- Render: conteo ---------- */
+  // Qué vale cada carta: siempre visible para que se sepa qué se está contando
+  function countLegend() {
+    const grp = (cls, val, ranks, why) => '<div class="lg ' + cls + '"><b>' + val + '</b><span class="ranks">' + ranks + '</span><small>' + why + '</small></div>';
+    return '<div class="count-legend">' +
+      grp('plus', '+1', '2 3 4 5 6', 'cartas bajas') +
+      grp('zero', '0', '7 8 9', 'neutras') +
+      grp('minus', '−1', '10 J Q K A', 'cartas altas') + '</div>';
+  }
+
+  function countHowTo(open) {
+    return '<details class="howto"' + (open ? ' open' : '') + '><summary>¿Cómo funciona y por qué sirve?</summary><ol>' +
+      '<li><b>Suma cada carta que ves</b> con los valores de arriba (las tuyas, las del dealer y la oculta cuando se voltea). Ese total acumulado es el <b>running count</b>; vuelve a 0 cuando se baraja el zapato.</li>' +
+      '<li><b>Divide entre los mazos que faltan</b> para obtener el <b>true count</b>. Un +6 con 6 mazos por delante es poco; con 1 mazo es muchísimo.</li>' +
+      '<li><b>Por qué funciona:</b> si salieron muchas cartas bajas (conteo positivo), en el zapato quedan más 10 y Ases. Eso te da más blackjacks (pagan 3:2) y hace que el dealer, que está obligado a pedir hasta 17, se pase más.</li>' +
+      '<li><b>Cómo usarlo:</b> conteo bajo o negativo → apuesta el mínimo. True count +2 o más → sube la apuesta. True count +3 o más → el seguro pasa a convenir.</li>' +
+      '</ol></details>';
+  }
+
+  // Desglose de la ronda: "empezaste en +2 → +1 −1 0 → ahora +2"
+  function countFeed() {
+    const g = game;
+    const chips = g.seen.map((c) => {
+      const v = E.hiLo(c);
+      return '<span class="fc ' + hiLoCls(v) + '">' + c.rank + '<i>' + hiLoTxt(v) + '</i></span>';
+    }).join('');
+    const delta = g.runningCount - g.startCount;
+    let html = '<div class="feed"><div class="feed-head">Esta ronda</div>';
+    if (!g.seen.length) {
+      html += '<p class="muted">Aún no salen cartas. El conteo arranca en <b>' + signed(g.startCount) + '</b>' +
+        (g.startCount === 0 ? ' (zapato recién barajado o equilibrado).' : ' (lo que traes de rondas anteriores).') + '</p>';
+    } else {
+      html += '<div class="feed-row"><span class="fc start">inicio<i>' + signed(g.startCount) + '</i></span>' + chips +
+        '<span class="fc now">ahora<i>' + signed(g.runningCount) + '</i></span></div>' +
+        '<p class="note">Esta ronda sumó <b>' + signed(delta) + '</b>: ' + signed(g.startCount) + ' ' + (delta < 0 ? '−' : '+') + ' ' + Math.abs(delta) + ' = <b>' + signed(g.runningCount) + '</b>.' +
+        (g.dealer.hidden ? ' La carta oculta del dealer se cuenta cuando se voltea.' : '') + '</p>';
+    }
+    if (g.shuffled) html += '<p class="note">Se barajó el zapato al repartir: el conteo empezó de nuevo en 0.</p>';
+    return html + '</div>';
+  }
+
+  // Números + cómo se calculan + qué significan + cuánto apostar
+  function countNumbers() {
+    const g = game;
+    const hidden = g.dealer.hidden ? 1 : 0;
+    const decks = g.shoe.decksRemaining(hidden);
+    const cardsLeft = g.shoe.remaining + hidden;
+    const tc = g.trueCount;
+    const adv = g.countAdvice();
+    const sug = g.suggestedBet();
+    const pos = Math.max(0, Math.min(100, (tc + 5) / 10 * 100));
+    let html = '<div class="count-grid">' +
+      '<div><b>' + signed(g.runningCount) + '</b><span>Running count</span><small>suma de cartas vistas</small></div>' +
+      '<div><b>' + decks.toFixed(1) + '</b><span>Mazos restantes</span><small>' + cardsLeft + ' cartas ÷ 52</small></div>' +
+      '<div class="tc ' + adv.level + '"><b>' + (tc > 0 ? '+' : tc < 0 ? '−' : '') + Math.abs(tc).toFixed(1) + '</b><span>True count</span><small>' + signed(g.runningCount) + ' ÷ ' + decks.toFixed(1) + '</small></div></div>' +
+      '<div class="meter" aria-hidden="true"><i style="left:' + pos + '%"></i></div>' +
+      '<div class="meter-lbl"><span>−5 casa</span><span>0</span><span>+5 tú</span></div>' +
+      '<div class="verdict ' + adv.level + '"><b>' + adv.label + '</b> · tu ventaja estimada ' + (adv.edge >= 0 ? '+' : '−') + Math.abs(adv.edge * 100).toFixed(1) + '%' +
+      '<p>' + adv.text + '</p>' +
+      '<div class="sug">';
+    if (g.bankroll < MIN_BET * g.spots && g.phase === 'betting') return html + 'Sin fondos para apostar.</div></div>';
+    const unit = window.GameModule.BET_UNIT;
+    html += 'Apuesta sugerida' + (g.phase === 'betting' ? '' : ' para la próxima ronda') + ': <b>' + money(sug.amount) + '</b> por mano' +
+      ' <span class="muted">(' + sug.units + (sug.units === 1 ? ' unidad' : ' unidades') + ' de ' + money(unit) +
+      (sug.amount !== sug.units * unit ? ', ajustada a tu banca' : '') + ')</span>';
+    if (g.phase === 'betting') {
+      html += ' <button class="small" data-action="use-suggested"' + (g.bet === sug.amount ? ' disabled' : '') + '>Usar</button>';
+    }
+    return html + '</div></div>';
+  }
+
   function renderCount() {
     const el = $('countPanel');
-    if (!prefs.showCount) { el.innerHTML = '<p class="muted">Oculto. Actívalo para ver running count y true count (el seguro se evaluará con el true count).</p>'; return; }
     const g = game;
-    const decks = g.shoe.decksRemaining(g.dealer.hidden ? 1 : 0);
-    el.innerHTML = '<div class="count-grid">' +
-      '<div><b>' + (g.runningCount > 0 ? '+' : '') + g.runningCount + '</b><span>Running</span></div>' +
-      '<div><b>' + decks.toFixed(1) + '</b><span>Mazos rest.</span></div>' +
-      '<div><b>' + (g.trueCount > 0 ? '+' : '') + g.trueCount.toFixed(1) + '</b><span>True count</span></div></div>' +
-      '<p class="note">Hi-Lo: 2–6 = +1 · 7–9 = 0 · 10, J, Q, K, A = −1. True count = running ÷ mazos restantes. Con TC alto sube tu apuesta; con TC ≥ +3 el seguro vale la pena.</p>';
+    if (prefs.countMode === 'off') {
+      el.innerHTML = '<p>Contar cartas te dice cuándo el zapato te favorece para apostar más.</p>' + countLegend() +
+        '<p class="note"><b>Aprender</b>: cada carta de la mesa muestra su valor y aquí ves el conteo paso a paso. ' +
+        '<b>Practicar</b>: tú llevas la cuenta y al final de cada ronda te pregunto el resultado.</p>';
+      return;
+    }
+
+    if (prefs.countMode === 'learn') {
+      el.innerHTML = countLegend() + countFeed() + countNumbers() + countHowTo(g.stats.rounds === 0);
+      return;
+    }
+
+    // Practicar: nada visible hasta que respondas al final de la ronda
+    let html = countLegend();
+    const answered = quiz && quiz.round === g.stats.rounds;
+    if (g.phase === 'settled' && !answered) {
+      html += '<form class="quiz" data-form="count-quiz"><label for="countGuess">Ronda terminada. <b>¿Cuál es el running count ahora?</b></label>' +
+        '<div class="quiz-row"><input id="countGuess" type="number" step="1" inputmode="numeric" required autocomplete="off" placeholder="ej. 3 o -2">' +
+        '<button type="submit" class="primary">Comprobar</button></div>' +
+        '<p class="note">Suma todas las cartas que se vieron desde que se barajó (incluida la oculta del dealer).</p></form>';
+    } else if (g.phase === 'settled' && answered) {
+      html += '<div class="fb ' + (quiz.ok ? 'ok' : 'bad') + '">' + (quiz.ok ? '✔ ¡Exacto! ' : '✖ Dijiste ' + signed(quiz.guess) + '. ') +
+        'El running count es <b>' + signed(g.runningCount) + '</b>.</div>' + countFeed() + countNumbers();
+    } else if (g.phase === 'betting') {
+      html += '<p>Usa tu conteo para decidir la apuesta: <b>true count = running ÷ mazos restantes</b>.</p>' +
+        '<p class="muted">Quedan ~' + g.shoe.decksRemaining(0).toFixed(1) + ' mazos en el zapato (' + g.shoe.remaining + ' cartas).</p>' +
+        (g.stats.rounds === 0 ? countHowTo(true) : '');
+    } else {
+      html += '<p>Cuenta mentalmente cada carta que aparece en la mesa. Al terminar la ronda te pregunto el running count.</p>' +
+        (g.shuffled ? '<p class="note">Zapato recién barajado: empieza desde 0.</p>' : '');
+    }
+    el.innerHTML = html;
   }
 
   /* ---------- Render: estadísticas ---------- */
@@ -236,6 +342,7 @@
       ['Costo de errores', money(-st.moneyLost) + ' (EV)'],
       ['Pico de banca', money(st.peak)]
     ];
+    if (st.countChecks) rows.push(['Conteo acertado', st.countCorrect + ' / ' + st.countChecks]);
     let html = '<div class="stat-grid">' + rows.map((r) => '<div><span>' + r[0] + '</span><span>' + r[1] + '</span></div>').join('') + '</div>';
     if (st.errors.length) {
       html += '<p class="note" style="margin-top:10px">Últimos errores:</p><ul class="errors">' + st.errors.slice(0, 8).map((e) => '<li>' + esc(e.text) + '</li>').join('') + '</ul>';
@@ -256,9 +363,13 @@
 
   /* ---------- Render general ---------- */
   function render() {
-    game.countAssist = prefs.showCount;
+    game.countAssist = prefs.countMode !== 'off';
     $('optPractice').checked = prefs.practice;
-    $('optCount').checked = prefs.showCount;
+    document.querySelectorAll('#countMode button').forEach((b) => {
+      b.classList.toggle('on', b.dataset.action === 'count-' + prefs.countMode);
+    });
+    if (game.bankroll >= MIN_BET) wentBroke = false;
+    $('broke').hidden = !(wentBroke && game.phase === 'betting');
     renderTop();
     renderTable();
     renderControls();
@@ -266,6 +377,8 @@
     renderFeedback();
     renderCount();
     renderStats();
+    const guess = $('countGuess');
+    if (guess) guess.focus({ preventScroll: true }); // escribir y Enter para comprobar
     save();
   }
 
@@ -279,15 +392,19 @@
       case 'ins-yes': g.takeInsurance(true); revealed = false; break;
       case 'ins-no': g.takeInsurance(false); revealed = false; break;
       case 'deal': g.deal(); revealed = false; break;
-      case 'next': g.nextRound(); g.rebet(); break;
+      case 'next': g.nextRound(); g.rebet(); wentBroke = g.bankroll < MIN_BET; break;
       case 'rebuy': g.rebuy(); break;
       case 'spots-1': g.setSpots(1); break;
       case 'spots-2': g.setSpots(2); break;
       case 'clear': g.clearBet(); break;
       case 'rebet': g.rebet(); break;
       case 'reveal': revealed = true; break;
+      case 'count-off': prefs.countMode = 'off'; break;
+      case 'count-learn': prefs.countMode = 'learn'; break;
+      case 'count-quiz': prefs.countMode = 'quiz'; break;
+      case 'use-suggested': g.setBet(g.suggestedBet().amount); break;
       case 'reset-all':
-        if (confirm('¿Reiniciar banca y estadísticas?')) { g.resetAll(); revealed = false; }
+        if (confirm('¿Reiniciar banca y estadísticas?')) { g.resetAll(); revealed = false; quiz = null; }
         break;
     }
     hideTip();
@@ -321,8 +438,16 @@
     }
   });
 
+  document.addEventListener('submit', (e) => {
+    if (e.target.dataset.form !== 'count-quiz') return;
+    e.preventDefault();
+    const guess = parseInt($('countGuess').value, 10);
+    if (isNaN(guess) || game.phase !== 'settled') return;
+    quiz = { round: game.stats.rounds, guess, ok: game.checkCount(guess) };
+    render();
+  });
+
   $('optPractice').addEventListener('change', (e) => { prefs.practice = e.target.checked; revealed = false; render(); });
-  $('optCount').addEventListener('change', (e) => { prefs.showCount = e.target.checked; render(); });
 
   /* ---------- Tooltips ---------- */
   const tipEl = $('tooltip');

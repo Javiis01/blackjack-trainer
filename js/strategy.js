@@ -315,6 +315,30 @@
       : 'El seguro tiene EV de −7.7% sobre lo apostado (gana solo ' + pc(4 / 13) + ' vs el 33.3% que necesita). Nunca lo tomes, salvo true count ≥ +3.' };
   }
 
+  /* ---------- Qué significa el true count ---------- */
+  // Regla práctica Hi-Lo: cada +1 de true count da ~+0.5% al jugador; la casa parte con ~0.5%.
+  function countAdvice(tc) {
+    const edge = -0.005 + 0.005 * tc;
+    const t = Math.floor(tc + 1e-9);
+    const units = t < 2 ? 1 : Math.min(8, 2 * t - 2); // TC+2 = 2u, +3 = 4u, +4 = 6u, +5 o más = 8u
+    let level, label, text;
+    if (tc <= -1) {
+      level = 'bad'; label = 'Desfavorable';
+      text = 'Ya salieron muchas cartas altas, así que en el zapato quedan más cartas bajas: el dealer se pasa menos y hay menos blackjacks. Apuesta el mínimo.';
+    } else if (tc < 1) {
+      level = 'neutral'; label = 'Neutral';
+      text = 'El zapato está equilibrado: la casa conserva su ventaja normal. Apuesta el mínimo.';
+    } else if (tc < 2) {
+      level = 'neutral'; label = 'Casi parejo';
+      text = 'Quedan algo más de cartas altas: estás casi a la par con la casa, pero todavía no conviene subir la apuesta.';
+    } else {
+      level = 'good'; label = 'Favorable';
+      text = 'Quedan muchas cartas altas (10 y Ases): salen más blackjacks (pagan 3:2) y el dealer se pasa más. La ventaja es tuya: sube la apuesta.' +
+        (tc >= 3 ? ' Con TC ≥ +3 también conviene tomar el seguro.' : '');
+    }
+    return { tc, edge, units, level, label, text };
+  }
+
   /* ---------- Tabla de estrategia generada por el motor ---------- */
   const CODE = { hit: 'H', stand: 'S', double: 'D', split: 'P', surrender: 'R' };
   function chart() {
@@ -335,7 +359,7 @@
     return { ups, rows };
   }
 
-  const api = { analyze, aceSplitHand, explain, insuranceAdvice, chart, dealerBust, dealerDist, standOutcome, NAMES, CODE, totalOf, isSoft };
+  const api = { analyze, aceSplitHand, explain, insuranceAdvice, countAdvice, chart, dealerBust, dealerDist, standOutcome, NAMES, CODE, totalOf, isSoft };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Strategy = api;
 })(typeof window !== 'undefined' ? window : globalThis);

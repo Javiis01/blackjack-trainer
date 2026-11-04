@@ -25,6 +25,14 @@ for (const a of ['stand', 'hit', 'double']) {
   check('w+p+l=1 ' + a, near(r.win + r.push + r.lose, 1, 1e-9), r);
 }
 
+// ---- Interpretación del true count ----
+check('TC 0 neutral, 1 unidad', S.countAdvice(0).level === 'neutral' && S.countAdvice(0).units === 1);
+check('TC -2 desfavorable', S.countAdvice(-2).level === 'bad' && S.countAdvice(-2).units === 1);
+check('TC +2 favorable, 2 unidades', S.countAdvice(2).level === 'good' && S.countAdvice(2).units === 2);
+check('TC +3.5 -> 4 unidades', S.countAdvice(3.5).units === 4);
+check('TC +9 -> tope 8 unidades', S.countAdvice(9).units === 8);
+check('ventaja ~0 en TC +1', near(S.countAdvice(1).edge, 0, 1e-9));
+
 // ---- Tabla de estrategia básica H17, DAS, rendición tardía (6-8 mazos) ----
 // columnas: 2 3 4 5 6 7 8 9 10 A
 const ups = [2, 3, 4, 5, 6, 7, 8, 9, 10, 1];
